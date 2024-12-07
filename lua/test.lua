@@ -1,24 +1,51 @@
-package.cpath = "/opt/homebew;/Users/billylo/.luarocks/lib/lua/5.4/?.so;/opt/homebrew/lib/lua/5.4/?.so"
-
-print(package.path)
-print(package.cpath)
-
-local http = require("http")
+local socket = require("socket")
+local http = require("socket.http")
+local url = require("socket.url")
+local ltn12 = require("ltn12")
 local json = require("json")
 
--- Example usage with a hypothetical weather API
-local geoapi_url = "https://iplocationapi.evergreen-labs.org/api/location/8.8.8.8"
+local function geocode(ip)
+-- URL of the JSON web service
+  local url = "https://iplocationapi.evergreen-labs.org/api/location/" .. ip
 
-local response, err = http.request(geoapi_url)
+  -- Make the HTTP request
+  local response_body = {}
+  local res, code, headers, status = http.request {
+    url = url,
+    sink = ltn12.sink.table(response_body)
+  }
 
-if err then
-  error("Weather API request failed: " .. err)
+  -- Check for errors
+  if code ~= 200 then
+    error("HTTP request failed with code: " .. code)
+  end
+
+  -- Concatenate the response body
+  local response_text = table.concat(response_body)
+
+  -- Parse the JSON response
+  local data, pos, err = json.decode(response_text)
+
+  -- Check for JSON parsing errors
+  if not data then
+    error("JSON parsing failed: " .. err .. " at position " .. pos)
+  end
+
+  return data
 end
 
-local geodata = json.decode(response)
-
-if not geodata then
-  error("geodata JSON parsing failed")
+local function split(inputstr, sep)
+  if sep == nil then
+    sep = "%s"
+  end
+  local t={}
+  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+    table.insert(t, str)
+  end
+  return t
 end
 
-print("Country: " .. geodata.city)
+local output = geocode("4.4.4.4")
+
+print(output.country)
+print(output.city)

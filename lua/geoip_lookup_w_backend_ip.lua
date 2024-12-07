@@ -1,79 +1,45 @@
--- Source: https://github.com/O-X-L/haproxy-geoip
--- Copyright (C) 2024 Rath Pascal
--- License: MIT
+local socket = require("socket")
+local http = require("socket.http")
+local url = require("socket.url")
+local ltn12 = require("ltn12")
+local json = require("json")
 
--- NOTE: the ltrim parameter can be used to remove a prefix - like: 'AS1337' => '1337'
+local function geocode(ip)
+    -- URL of the JSON web service
+    local url = "https://iplocationapi.evergreen-labs.org/api/location/" .. ip
 
-local function http_request(lookup, filter, src, ltrim)
-    local s = core.tcp()
-
-    local addr = '127.0.0.1'
-    local port = 6970
-
-    local hdrs = {
-        [1] = string.format('host: %s:%s', addr, port),
-        [2] = 'accept: */*',
-        [3] = 'connection: close'
+    -- Make the HTTP request
+    local response_body = {}
+    local res, code, headers, status = http.request {
+    url = url,
+    sink = ltn12.sink.table(response_body)
     }
 
-    local req = {
-        [1] = 'GET /?lookup=' .. lookup .. '&ip=' .. src .. '&filter=' .. filter .. ' HTTP/1.1',
-        [2] = table.concat(hdrs, '\r\n'),
-        [3] = '\r\n'
-    }
-
-    req = table.concat(req, '\r\n')
-
-    s:connect(addr, port)
-    s:send(req)
-    while true do
-        local line = s:receive('*l')
-        if not line then break end
-        if line == '' then break end
+    -- Check for errors
+    if code ~= 200 then
+    error("HTTP request failed with code: " .. code)
     end
-    local res_body = s:receive('*a')
-    if res_body == nil then
-        return '00'
+
+    -- Concatenate the response body
+    local response_text = table.concat(response_body)
+
+    -- Parse the JSON response
+    local data, pos, err = json.decode(response_text)
+
+    -- Check for JSON parsing errors
+    if not data then
+    error("JSON parsing failed: " .. err .. " at position " .. pos)
     end
-    return string.sub(res_body, 1 + ltrim, -2)
+
+    return data
 end
-
--- examples for MaxMind:
 
 local function lookup_geoip_country(txn)
-    country_code = http_request('country', 'country.iso_code', txn.f:src(), 0)
-    txn:set_var('txn.geoip_country', country_code)
+    local data = geocode(txn.f:src())
+    country = data['country']
+    city = data['city']
+    txn:set_var('txn.geoip_country', country)
+    txn:set_var('txn.geoip_city', city)
 end
-
-local function lookup_geoip_asn(txn)
-    asn = http_request('asn', 'autonomous_system_number', txn.f:src(), 0)
-    txn:set_var('txn.geoip_asn', asn)
-end
-
-local function lookup_geoip_asname(txn)
-    asname = http_request('asn', 'autonomous_system_organization', txn.f:src(), 0)
-    txn:set_var('txn.geoip_asname', asname)
-end
-
--- examples for IPInfo:
-
-local function lookup_geoip_country(txn)
-    country_code = http_request('country', 'country', txn.f:src(), 0)
-    txn:set_var('txn.geoip_country', country_code)
-end
-
-local function lookup_geoip_asn(txn)
-    asn = http_request('asn', 'asn', txn.f:src(), 2)
-    txn:set_var('txn.geoip_asn', asn)
-end
-
-local function lookup_geoip_asname(txn)
-    asname = http_request('asn', 'name', txn.f:src(), 0)
-    txn:set_var('txn.geoip_asname', asname)
-end
-
--- examples end
 
 core.register_action('lookup_geoip_country', {'tcp-req', 'http-req'}, lookup_geoip_country, 0)
-core.register_action('lookup_geoip_asn', {'tcp-req', 'http-req'}, lookup_geoip_asn, 0)
-core.register_action('lookup_geoip_asname', {'tcp-req', 'http-req'}, lookup_geoip_asname, 0)
