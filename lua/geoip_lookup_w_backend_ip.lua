@@ -6,7 +6,7 @@ local json = require("json")
 
 local function geocode(ip)
     -- URL of the JSON web service
-    local url = "https://iplocationapi.evergreen-labs.org/api/location/" .. ip
+    local url = "http://localhost:8087/api/location/" .. ip
 
     -- Make the HTTP request
     local response_body = {}
@@ -36,10 +36,16 @@ end
 
 local function lookup_geoip_country(txn)
     local data = geocode(txn.f:src())
-    country = data['country']
-    city = data['city']
-    txn:set_var('txn.geoip_country', country)
-    txn:set_var('txn.geoip_city', city)
+    local country = data['country']
+    local region = '' 
+    if data['region1_name'] then
+    region = data['region1_name']
+    else
+    region = data['city']
+    end
+    print('look***' .. country .. region)
+    txn.http:req_add_header('cdn-requestcountrycode', country)
+    txn.http:req_add_header('cdn-requeststatecode', region)
 end
 
-core.register_action('lookup_geoip_country', {'tcp-req', 'http-req'}, lookup_geoip_country, 0)
+core.register_action('lookup_geoip_country', {'http-req'}, lookup_geoip_country, 0)
