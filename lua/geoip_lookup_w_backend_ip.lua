@@ -48,4 +48,12 @@ local function lookup_geoip_country(txn)
     txn.http:req_add_header('cdn-requeststatecode', region)
 end
 
-core.register_action('lookup_geoip_country', {'http-req'}, lookup_geoip_country, 0)
+local function copy_real_ip_header(txn)
+    local realip = txn.f:hdr('X-Forwarded-For')
+    -- print('*** realip = ' .. realip)
+    txn.http:req_add_header('X-Real-Ip', realip)
+end
+
+
+-- core.register_action('lookup_geoip_country', {'http-req'}, lookup_geoip_country, 0)
+core.register_action('copy_real_ip_header', {'http-req'}, copy_real_ip_header, 0)
